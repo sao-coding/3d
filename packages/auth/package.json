@@ -1,0 +1,24 @@
+{
+  "name": "@3d/auth",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {},
+  "dependencies": {
+    "@3d/db": "workspace:*",
+    "@3d/env": "workspace:*",
+    "better-auth": "catalog:",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@3d/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

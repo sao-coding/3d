@@ -1,0 +1,28 @@
+{
+  "name": "@3d/api",
+  "type": "module",
+  "exports": {
+    ".": {
+      "default": "./src/index.ts"
+    },
+    "./*": {
+      "default": "./src/*.ts"
+    }
+  },
+  "scripts": {},
+  "dependencies": {
+    "@3d/auth": "workspace:*",
+    "@3d/db": "workspace:*",
+    "@3d/env": "workspace:*",
+    "@orpc/client": "catalog:",
+    "@orpc/openapi": "catalog:",
+    "@orpc/server": "catalog:",
+    "@orpc/zod": "catalog:",
+    "dotenv": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@3d/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}
