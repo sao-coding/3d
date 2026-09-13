@@ -9,13 +9,15 @@ build
 *.tsbuildinfo
 
 # Generated files
-apps/web/src/routeTree.gen.ts
+src/routeTree.gen.ts
 local.db
 local.db-*
+.data/
 
 # Environment variables
 .env
 .env*.local
+!.env.example
 
 # IDEs and editors
 .vscode/*

@@ -4,17 +4,12 @@ services:
   web:
     build:
       context: .
-      dockerfile: apps/web/Dockerfile
+      dockerfile: Dockerfile
     init: true
     ports:
-      - "3001:3001"
+      - "3333:3001"
     env_file:
-      - path: apps/web/.env
-        required: false
-    environment:
-      BETTER_AUTH_URL: http://localhost:3001
-      CORS_ORIGIN: http://localhost:3001
-      DATABASE_URL: file:/data/local.db
+      - .env
     volumes:
       - type: bind
         source: ./.data
