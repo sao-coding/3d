@@ -9,9 +9,10 @@ import { ColorDot } from "@/components/color-dot";
 
 export interface FilamentOption {
   id: string;
+  /** 由「廠牌 材質 色名」組出來的顯示名稱 */
   name: string;
   color?: string | null;
-  materialType: string;
+  materialName?: string | null;
   costPerGram: number;
 }
 
@@ -56,7 +57,7 @@ export function FilamentSelect({
             <ColorDot color={filament.color} />
             <span>{filament.name}</span>
             <span className="text-muted-foreground">
-              （{filament.materialType} · {formatPerGram(filament.costPerGram)}）
+              （{formatPerGram(filament.costPerGram)}）
             </span>
           </SelectItem>
         ))}

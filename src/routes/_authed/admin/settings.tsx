@@ -1,15 +1,18 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { Plus, Settings2, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
+import { NumberField } from "@/components/number-field";
+import { PageHeading, PageShell } from "@/components/page-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NumberField } from "@/components/number-field";
 import { client, orpc } from "@/lib/orpc";
 
 export const Route = createFileRoute("/_authed/admin/settings")({
@@ -35,8 +38,18 @@ function SettingsPage() {
   const tiersQuery = useQuery(orpc.settings.listModelingTiers.queryOptions());
 
   return (
-    <div className="container mx-auto max-w-2xl space-y-4 px-4 py-4">
-      <h1 className="text-xl font-semibold">全域參數設定</h1>
+    <PageShell width="md" className="space-y-8">
+      <PageHeading
+        eyebrow={
+          <>
+            <Settings2 className="size-3.5" />
+            賣家後台
+          </>
+        }
+        title="全域參數設定"
+        description="電費、折舊、人工費與失敗率的預設值，會套用到所有新的報價。"
+      />
+
       {settingsQuery.data && (
         <SettingsForm
           settings={settingsQuery.data}
@@ -44,23 +57,16 @@ function SettingsPage() {
         />
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>建模複雜度分級</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          {(tiersQuery.data ?? []).map((tier) => (
-            <TierRow
-              key={tier.id}
-              tier={tier}
-              onSaved={() =>
-                queryClient.invalidateQueries({ queryKey: orpc.settings.listModelingTiers.queryKey() })
-              }
-            />
-          ))}
-        </CardContent>
-      </Card>
-    </div>
+      <ModelingTiersCard
+        tiers={tiersQuery.data ?? []}
+        isLoading={tiersQuery.isLoading}
+        onChanged={() =>
+          queryClient.invalidateQueries({
+            queryKey: orpc.settings.listModelingTiers.queryKey(),
+          })
+        }
+      />
+    </PageShell>
   );
 }
 
@@ -102,13 +108,13 @@ function SettingsForm({
   ];
 
   return (
-    <Card>
+    <Card className="animate-rise">
       <CardHeader>
         <CardTitle>計價參數</CardTitle>
       </CardHeader>
       <CardContent>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
-          <div className="grid grid-cols-2 gap-3">
+        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
             {fields.map(({ name, label }) => (
               <div key={name} className="space-y-2">
                 <Label>{label}</Label>
@@ -120,10 +126,80 @@ function SettingsForm({
               </div>
             ))}
           </div>
-          <Button type="submit" disabled={formState.isSubmitting}>
+          <Button type="submit" size="lg" disabled={formState.isSubmitting}>
             {formState.isSubmitting ? "儲存中..." : "儲存設定"}
           </Button>
         </form>
+      </CardContent>
+    </Card>
+  );
+}
+
+type Tier = Awaited<ReturnType<typeof client.settings.listModelingTiers>>[number];
+
+function ModelingTiersCard({
+  tiers,
+  isLoading,
+  onChanged,
+}: {
+  tiers: Tier[];
+  isLoading: boolean;
+  onChanged: () => void;
+}) {
+  const [adding, setAdding] = useState(false);
+
+  const addTier = async () => {
+    setAdding(true);
+    try {
+      // 新增一列空白分級，實際名稱與金額直接在列上改再按儲存
+      await client.settings.createModelingTier({
+        tierName: "新分級",
+        defaultPrice: 0,
+        sortOrder: (tiers.at(-1)?.sortOrder ?? -1) + 1,
+      });
+      onChanged();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "新增失敗");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const removeTier = async (id: string) => {
+    try {
+      await client.settings.deleteModelingTier({ id });
+      toast.success("已刪除分級");
+      onChanged();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "刪除失敗");
+    }
+  };
+
+  return (
+    <Card className="animate-rise">
+      <CardHeader>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1">
+            <CardTitle>建模複雜度分級</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              客人在詢價表單會看到這幾個選項與預設金額。
+            </p>
+          </div>
+          <Button type="button" variant="outline" size="lg" onClick={addTier} disabled={adding}>
+            <Plus className="size-4" />
+            新增分級
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {tiers.map((tier) => (
+          <TierRow key={tier.id} tier={tier} onSaved={onChanged} onDelete={removeTier} />
+        ))}
+        {!isLoading && tiers.length === 0 && (
+          <p className="text-sm text-muted-foreground">
+            還沒有任何分級。按「新增分級」建立第一個，客人才選得到建模服務的複雜度。
+          </p>
+        )}
       </CardContent>
     </Card>
   );
@@ -140,9 +216,11 @@ type TierFormValues = z.output<typeof tierSchema>;
 function TierRow({
   tier,
   onSaved,
+  onDelete,
 }: {
-  tier: Awaited<ReturnType<typeof client.settings.listModelingTiers>>[number];
+  tier: Tier;
   onSaved: () => void;
+  onDelete: (id: string) => void;
 }) {
   const { control, handleSubmit, formState } = useForm<TierFormInput, unknown, TierFormValues>({
     resolver: zodResolver(tierSchema),
@@ -160,8 +238,12 @@ function TierRow({
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="grid grid-cols-[1fr_auto_auto_auto] items-end gap-2">
-      <div className="space-y-1">
+    <form
+      onSubmit={handleSubmit(onSubmit)}
+      className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2 rounded-xl border border-border/70 bg-muted/30 p-3 sm:grid-cols-[minmax(0,1fr)_6rem_4.5rem_auto_auto]"
+    >
+      {/* 手機上名稱獨佔一列，金額與順序併一列，按鈕再一列 */}
+      <div className="col-span-2 space-y-1 sm:col-span-1">
         <Label>名稱</Label>
         <Controller name="tierName" control={control} render={({ field }) => <Input {...field} />} />
       </div>
@@ -170,7 +252,7 @@ function TierRow({
         <Controller
           name="defaultPrice"
           control={control}
-          render={({ field }) => <NumberField field={field} className="w-24" />}
+          render={({ field }) => <NumberField field={field} />}
         />
       </div>
       <div className="space-y-1">
@@ -178,11 +260,21 @@ function TierRow({
         <Controller
           name="sortOrder"
           control={control}
-          render={({ field }) => <NumberField field={field} className="w-16" />}
+          render={({ field }) => <NumberField field={field} />}
         />
       </div>
-      <Button type="submit" size="sm" disabled={formState.isSubmitting}>
+      <Button type="submit" size="sm" className="justify-self-start" disabled={formState.isSubmitting}>
         儲存
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="destructive"
+        className="justify-self-start"
+        aria-label={`刪除 ${tier.tierName}`}
+        onClick={() => onDelete(tier.id)}
+      >
+        <Trash2 className="size-3.5" />
       </Button>
     </form>
   );

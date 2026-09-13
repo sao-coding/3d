@@ -30,6 +30,12 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
       },
     ],
     links: [
+      { rel: "preconnect", href: "https://fonts.googleapis.com" },
+      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
+      {
+        rel: "stylesheet",
+        href: "https://fonts.googleapis.com/css2?family=Inter:wght@400..800&family=Noto+Sans+TC:wght@400..700&display=swap",
+      },
       {
         rel: "stylesheet",
         href: appCss,
@@ -40,6 +46,17 @@ export const Route = createRootRouteWithContext<RouterAppContext>()({
   component: RootDocument,
 });
 
+function Footer() {
+  return (
+    <footer className="mt-12 border-t border-border/60 py-8">
+      <div className="mx-auto flex w-full max-w-7xl flex-col items-center justify-between gap-2 px-4 text-xs text-muted-foreground sm:flex-row sm:px-6 lg:px-10">
+        <p>3D 列印代工報價計算機</p>
+        <p>估價僅供參考，最終價格以賣家確認為準</p>
+      </div>
+    </footer>
+  );
+}
+
 function RootDocument() {
   return (
     <html lang="zh-TW" suppressHydrationWarning>
@@ -48,9 +65,12 @@ function RootDocument() {
       </head>
       <body>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <div className="grid min-h-svh grid-rows-[auto_1fr]">
+          <div className="relative grid min-h-svh grid-rows-[auto_1fr_auto]">
+            <div className="app-aurora" aria-hidden />
+            <div className="app-grid" aria-hidden />
             <Header />
             <Outlet />
+            <Footer />
           </div>
           <Toaster richColors />
         </ThemeProvider>

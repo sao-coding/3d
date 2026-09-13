@@ -1,10 +1,12 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm } from "react-hook-form";
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import { Printer } from "lucide-react";
 import { toast } from "sonner";
 import { z } from "zod";
 
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { authClient } from "@/lib/auth-client";
@@ -52,34 +54,56 @@ export default function SignInForm() {
   }
 
   return (
-    <div className="mx-auto mt-10 w-full max-w-md p-6">
-      <h1 className="mb-6 text-center text-3xl font-bold">登入</h1>
+    <div className="mx-auto flex w-full max-w-md flex-col justify-center px-4 py-16">
+      <Card className="card-glow animate-rise">
+        <CardHeader className="items-center text-center">
+          <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-gradient-to-br from-brand to-brand-2 text-white shadow-lg shadow-brand/25">
+            <Printer className="size-6" />
+          </span>
+          <CardTitle className="mt-3 text-2xl">賣家登入</CardTitle>
+          <p className="text-sm text-muted-foreground">登入後才能管理線材、參數與報價歷史。</p>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="email">Email</Label>
+              <Controller
+                name="email"
+                control={control}
+                render={({ field }) => (
+                  <Input id="email" type="email" autoComplete="email" {...field} />
+                )}
+              />
+              {errors.email && (
+                <p className="text-xs font-medium text-destructive">{errors.email.message}</p>
+              )}
+            </div>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <Controller
-            name="email"
-            control={control}
-            render={({ field }) => <Input id="email" type="email" {...field} />}
-          />
-          {errors.email && <p className="text-red-500">{errors.email.message}</p>}
-        </div>
+            <div className="space-y-2">
+              <Label htmlFor="password">密碼</Label>
+              <Controller
+                name="password"
+                control={control}
+                render={({ field }) => (
+                  <Input id="password" type="password" autoComplete="current-password" {...field} />
+                )}
+              />
+              {errors.password && (
+                <p className="text-xs font-medium text-destructive">{errors.password.message}</p>
+              )}
+            </div>
 
-        <div className="space-y-2">
-          <Label htmlFor="password">密碼</Label>
-          <Controller
-            name="password"
-            control={control}
-            render={({ field }) => <Input id="password" type="password" {...field} />}
-          />
-          {errors.password && <p className="text-red-500">{errors.password.message}</p>}
-        </div>
-
-        <Button type="submit" className="w-full" disabled={isSubmitting}>
-          {isSubmitting ? "登入中..." : "登入"}
-        </Button>
-      </form>
+            <Button
+              type="submit"
+              size="lg"
+              className="w-full bg-gradient-to-r from-brand to-brand-2 text-base font-semibold text-white shadow-lg shadow-brand/25"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? "登入中..." : "登入"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   );
 }

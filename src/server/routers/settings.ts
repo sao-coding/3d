@@ -52,6 +52,27 @@ export const settingsRouter = {
     return db.select().from(modelingTiers).orderBy(modelingTiers.sortOrder);
   }),
 
+  createModelingTier: protectedProcedure
+    .input(
+      z.object({
+        tierName: z.string().min(1, "請輸入分級名稱"),
+        defaultPrice: z.number().int().min(0),
+        sortOrder: z.number().int().default(0),
+      }),
+    )
+    .handler(async ({ input }) => {
+      const [created] = await db.insert(modelingTiers).values(input).returning();
+      return created;
+    }),
+
+  deleteModelingTier: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .handler(async ({ input }) => {
+      // quotes.modelingTierId 是 set null，刪掉分級不會弄壞既有報價（金額早就寫死在報價上）
+      await db.delete(modelingTiers).where(eq(modelingTiers.id, input.id));
+      return { success: true };
+    }),
+
   updateModelingTier: protectedProcedure
     .input(
       z.object({

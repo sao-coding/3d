@@ -1,24 +1,29 @@
 import { relations, sql } from "drizzle-orm";
 import { index, integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-import { MATERIAL_TYPES, QUOTE_STATUSES, SEASONS } from "@/lib/constants";
+import { QUOTE_STATUSES, SEASONS } from "@/lib/constants";
 
-export { MATERIAL_TYPES, QUOTE_STATUSES, SEASONS };
-export type { MaterialType, QuoteStatus, Season } from "@/lib/constants";
+export { QUOTE_STATUSES, SEASONS };
+export type { QuoteStatus, Season } from "@/lib/constants";
 
-export const filaments = sqliteTable("filaments", {
+/**
+ * 材質（PLA、PETG…）。同時是 /materials 的材質介紹內容，也是線材的材質分類，
+ * 兩邊講的是同一件事，所以共用同一張表。
+ */
+export const materials = sqliteTable("materials", {
   id: text("id")
     .primaryKey()
     .$defaultFn(() => crypto.randomUUID()),
-  name: text("name").notNull(),
-  brand: text("brand"),
-  materialType: text("material_type", { enum: MATERIAL_TYPES }).notNull(),
-  color: text("color"),
-  purchasePrice: integer("purchase_price").notNull(),
-  weightGrams: integer("weight_grams").notNull().default(1000),
-  costPerGram: real("cost_per_gram").notNull(),
-  isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
-  purchasedAt: integer("purchased_at", { mode: "timestamp_ms" }),
+  name: text("name").notNull().unique(),
+  pros: text("pros", { mode: "json" }).$type<string[]>().notNull(),
+  cons: text("cons", { mode: "json" }).$type<string[]>().notNull(),
+  goodFor: text("good_for"),
+  /**
+   * 高溫材質（ABS/PC/Nylon 這類）耗電量較高，計價時每小時用的度數不同。
+   * 這是計價輸入，不是介紹文案。
+   */
+  isHighTemp: integer("is_high_temp", { mode: "boolean" }).notNull().default(false),
+  sortOrder: integer("sort_order").notNull().default(0),
   createdAt: integer("created_at", { mode: "timestamp_ms" })
     .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
     .notNull(),
@@ -27,6 +32,50 @@ export const filaments = sqliteTable("filaments", {
     .$onUpdate(() => new Date())
     .notNull(),
 });
+
+/** 線材廠牌（eSUN、Bambu…） */
+export const brands = sqliteTable("brands", {
+  id: text("id")
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: text("name").notNull().unique(),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: integer("created_at", { mode: "timestamp_ms" })
+    .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+    .notNull(),
+});
+
+export const filaments = sqliteTable(
+  "filaments",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    brandId: text("brand_id").references(() => brands.id, { onDelete: "restrict" }),
+    materialId: text("material_id")
+      .notNull()
+      .references(() => materials.id, { onDelete: "restrict" }),
+    /** 色名（黑、消光灰…）。沒有獨立的線材名稱，靠「廠牌 材質 色名」辨識。 */
+    colorName: text("color_name"),
+    color: text("color"),
+    purchasePrice: integer("purchase_price").notNull(),
+    weightGrams: integer("weight_grams").notNull().default(1000),
+    costPerGram: real("cost_per_gram").notNull(),
+    isActive: integer("is_active", { mode: "boolean" }).notNull().default(true),
+    purchasedAt: integer("purchased_at", { mode: "timestamp_ms" }),
+    createdAt: integer("created_at", { mode: "timestamp_ms" })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .notNull(),
+    updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+      .default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+      .$onUpdate(() => new Date())
+      .notNull(),
+  },
+  (table) => [
+    index("filaments_brandId_idx").on(table.brandId),
+    index("filaments_materialId_idx").on(table.materialId),
+  ],
+);
 
 export const pricingSettings = sqliteTable("pricing_settings", {
   id: text("id").primaryKey().default("default"),
@@ -93,10 +142,29 @@ export const quotes = sqliteTable(
       .$onUpdate(() => new Date())
       .notNull(),
   },
-  (table) => [index("quotes_filamentId_idx").on(table.filamentId), index("quotes_status_idx").on(table.status)],
+  (table) => [
+    index("quotes_filamentId_idx").on(table.filamentId),
+    index("quotes_status_idx").on(table.status),
+  ],
 );
 
-export const filamentRelations = relations(filaments, ({ many }) => ({
+export const materialRelations = relations(materials, ({ many }) => ({
+  filaments: many(filaments),
+}));
+
+export const brandRelations = relations(brands, ({ many }) => ({
+  filaments: many(filaments),
+}));
+
+export const filamentRelations = relations(filaments, ({ one, many }) => ({
+  material: one(materials, {
+    fields: [filaments.materialId],
+    references: [materials.id],
+  }),
+  brand: one(brands, {
+    fields: [filaments.brandId],
+    references: [brands.id],
+  }),
   quotes: many(quotes),
 }));
 

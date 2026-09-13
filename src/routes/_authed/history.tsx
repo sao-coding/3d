@@ -1,14 +1,16 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { History, Search } from "lucide-react";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { z } from "zod";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PageHeading, PageShell } from "@/components/page-shell";
+import { Button } from "@/components/ui/button";
 import { ColorDot } from "@/components/color-dot";
 import {
   Dialog,
@@ -29,7 +31,7 @@ import {
 } from "@/components/ui/select";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
-import { formatCurrency } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 import { client, orpc } from "@/lib/orpc";
 
 export const Route = createFileRoute("/_authed/history")({
@@ -67,41 +69,91 @@ function HistoryPage() {
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
 
+  const pendingCount = (listQuery.data ?? []).filter((row) => row.status === "pending").length;
+
   return (
-    <div className="container mx-auto max-w-2xl space-y-4 px-4 py-4">
-      <h1 className="text-xl font-semibold">報價歷史</h1>
-      <Input
-        placeholder="搜尋對象名稱"
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
+    <PageShell width="xl" className="space-y-8">
+      <PageHeading
+        eyebrow={
+          <>
+            <History className="size-3.5" />
+            賣家後台
+          </>
+        }
+        title="報價歷史"
+        description="待確認的排在最前面；點任一筆填入真實克重與工時即可完成報價。"
+        actions={
+          <div className="flex items-center gap-2">
+            <span className="rounded-full border border-border bg-card/70 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+              待確認 <span className="font-bold text-brand tabular-nums">{pendingCount}</span>
+            </span>
+            <span className="rounded-full border border-border bg-card/70 px-3 py-1.5 text-xs font-medium text-muted-foreground">
+              全部 <span className="font-bold tabular-nums">{listQuery.data?.length ?? 0}</span>
+            </span>
+          </div>
+        }
       />
 
-      <div className="space-y-2">
-        {rows.map((row) => (
-          <Card key={row.id} className="cursor-pointer" onClick={() => setOpenId(row.id)}>
-            <CardContent className="flex items-center justify-between">
-              <div className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <Badge variant={row.status === "pending" ? "secondary" : "default"}>
-                    {row.status === "pending" ? "待確認" : "已確認"}
+      <div className="relative max-w-md">
+        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          placeholder="搜尋對象名稱"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {rows.map((row, index) => {
+          const pending = row.status === "pending";
+          return (
+            <Card
+              key={row.id}
+              className="animate-rise hover-lift cursor-pointer"
+              style={{ animationDelay: `${Math.min(index, 9) * 40}ms` }}
+              onClick={() => setOpenId(row.id)}
+            >
+              <CardContent className="flex items-start justify-between gap-4">
+                <div className="min-w-0 space-y-2">
+                  <Badge
+                    variant={pending ? "secondary" : "default"}
+                    className={cn(
+                      pending
+                        ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                        : "bg-success/15 text-success",
+                    )}
+                  >
+                    {pending ? "待確認" : "已確認"}
                   </Badge>
-                  <span>{row.recipientName || "（未填寫）"}</span>
+                  <p className="truncate text-base font-semibold">
+                    {row.recipientName || "（未填寫）"}
+                  </p>
+                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
+                    <ColorDot color={row.filamentColor} />
+                    <span className="truncate">{row.filamentName}</span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <ColorDot color={row.filamentColor} />
-                  {row.filamentName}
+                <div className="shrink-0 text-right">
+                  <div className="text-lg font-bold tracking-tight tabular-nums">
+                    {row.roundedPrice != null ? formatCurrency(row.roundedPrice) : "—"}
+                  </div>
+                  <div className="text-xs text-muted-foreground">
+                    {new Date(row.createdAt).toLocaleDateString("zh-TW")}
+                  </div>
                 </div>
-              </div>
-              <div className="text-right">
-                <div>{row.roundedPrice != null ? formatCurrency(row.roundedPrice) : "待確認"}</div>
-                <div className="text-muted-foreground">
-                  {new Date(row.createdAt).toLocaleDateString("zh-TW")}
-                </div>
-              </div>
+              </CardContent>
+            </Card>
+          );
+        })}
+        {rows.length === 0 && (
+          <Card className="animate-rise py-12 text-center sm:col-span-2 xl:col-span-3">
+            <CardContent className="space-y-1">
+              <p className="font-semibold">目前沒有報價紀錄</p>
+              <p className="text-sm text-muted-foreground">客人送出詢價後就會出現在這裡。</p>
             </CardContent>
           </Card>
-        ))}
-        {rows.length === 0 && <p className="text-muted-foreground">目前沒有報價紀錄</p>}
+        )}
       </div>
 
       <Dialog open={Boolean(openId)} onOpenChange={(open) => !open && setOpenId(null)}>
@@ -117,7 +169,7 @@ function HistoryPage() {
           )}
         </DialogContent>
       </Dialog>
-    </div>
+    </PageShell>
   );
 }
 
@@ -324,7 +376,7 @@ function QuoteDetail({
             </>
           )}
           <DialogFooter>
-            <Button type="submit" disabled={formState.isSubmitting}>
+            <Button type="submit" size="lg" disabled={formState.isSubmitting}>
               {formState.isSubmitting ? "處理中..." : "確認並完成報價"}
             </Button>
           </DialogFooter>

@@ -2,9 +2,10 @@ import { ORPCError } from "@orpc/server";
 import { desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
+import { filamentLabel } from "@/lib/filament-label";
 import { calculateQuote, getDefaultSeason, type QuoteBreakdown } from "@/lib/pricing";
 import { db } from "@/server/db";
-import { SEASONS, filaments, modelingTiers, quotes } from "@/server/db/schema/app";
+import { SEASONS, brands, filaments, materials, modelingTiers, quotes } from "@/server/db/schema/app";
 import { notifyNewQuoteRequest } from "@/server/notify";
 import { protectedProcedure, publicProcedure } from "@/server/procedures";
 import { getOrCreateSettings } from "@/server/routers/settings";
@@ -27,8 +28,24 @@ const quoteInput = z.object({
   recipientName: z.string().optional(),
 });
 
+/** 線材連同廠牌/材質一起撈，才組得出顯示名稱、也才知道是不是高溫材質 */
+const filamentWithNames = {
+  id: filaments.id,
+  color: filaments.color,
+  colorName: filaments.colorName,
+  costPerGram: filaments.costPerGram,
+  brandName: brands.name,
+  materialName: materials.name,
+  isHighTemp: materials.isHighTemp,
+} as const;
+
 async function resolveBreakdown(input: z.infer<typeof quoteInput>) {
-  const [filament] = await db.select().from(filaments).where(eq(filaments.id, input.filamentId));
+  const [filament] = await db
+    .select(filamentWithNames)
+    .from(filaments)
+    .innerJoin(materials, eq(filaments.materialId, materials.id))
+    .leftJoin(brands, eq(filaments.brandId, brands.id))
+    .where(eq(filaments.id, input.filamentId));
   if (!filament) throw new ORPCError("NOT_FOUND", { message: "找不到這個線材" });
 
   const settings = await getOrCreateSettings();
@@ -50,7 +67,7 @@ async function resolveBreakdown(input: z.infer<typeof quoteInput>) {
   const breakdown = calculateQuote(
     {
       costPerGram: filament.costPerGram,
-      materialType: filament.materialType,
+      isHighTemp: filament.isHighTemp,
       weightGrams: input.weightGrams ?? null,
       printHours: input.printHours ?? null,
       season,
@@ -128,7 +145,7 @@ export const quoteRouter = {
     await notifyNewQuoteRequest({
       quoteId: created.id,
       recipientName: created.recipientName,
-      filamentName: filament.name,
+      filamentName: filamentLabel(filament),
       serviceType: input.needsModeling ? "modeling" : "print_only",
       modelUrl: created.modelUrl,
       notes: created.notes,
@@ -202,7 +219,9 @@ export const quoteRouter = {
         id: quotes.id,
         status: quotes.status,
         recipientName: quotes.recipientName,
-        filamentName: filaments.name,
+        brandName: brands.name,
+        materialName: materials.name,
+        colorName: filaments.colorName,
         filamentColor: filaments.color,
         needsModeling: quotes.needsModeling,
         modelUrl: quotes.modelUrl,
@@ -220,19 +239,23 @@ export const quoteRouter = {
       })
       .from(quotes)
       .innerJoin(filaments, eq(quotes.filamentId, filaments.id))
+      .innerJoin(materials, eq(filaments.materialId, materials.id))
+      .leftJoin(brands, eq(filaments.brandId, brands.id))
       .where(eq(quotes.id, input.id));
     if (!row) throw new ORPCError("NOT_FOUND");
-    return row;
+    return { ...row, filamentName: filamentLabel(row) };
   }),
 
   // 需登入：/history 完整列表
   list: protectedProcedure.handler(async () => {
-    return db
+    const rows = await db
       .select({
         id: quotes.id,
         status: quotes.status,
         recipientName: quotes.recipientName,
-        filamentName: filaments.name,
+        brandName: brands.name,
+        materialName: materials.name,
+        colorName: filaments.colorName,
         filamentColor: filaments.color,
         totalPrice: quotes.totalPrice,
         roundedPrice: quotes.roundedPrice,
@@ -240,7 +263,10 @@ export const quoteRouter = {
       })
       .from(quotes)
       .innerJoin(filaments, eq(quotes.filamentId, filaments.id))
+      .innerJoin(materials, eq(filaments.materialId, materials.id))
+      .leftJoin(brands, eq(filaments.brandId, brands.id))
       .orderBy(desc(quotes.createdAt));
+    return rows.map((row) => ({ ...row, filamentName: filamentLabel(row) }));
   }),
 
   // 需登入：/history 明細與「完成報價」表單的初始值
@@ -248,13 +274,21 @@ export const quoteRouter = {
     const [row] = await db
       .select({
         quote: quotes,
-        filamentName: filaments.name,
+        brandName: brands.name,
+        materialName: materials.name,
+        colorName: filaments.colorName,
         filamentColor: filaments.color,
       })
       .from(quotes)
       .innerJoin(filaments, eq(quotes.filamentId, filaments.id))
+      .innerJoin(materials, eq(filaments.materialId, materials.id))
+      .leftJoin(brands, eq(filaments.brandId, brands.id))
       .where(eq(quotes.id, input.id));
     if (!row) throw new ORPCError("NOT_FOUND");
-    return { ...row.quote, filamentName: row.filamentName, filamentColor: row.filamentColor };
+    return {
+      ...row.quote,
+      filamentName: filamentLabel(row),
+      filamentColor: row.filamentColor,
+    };
   }),
 };

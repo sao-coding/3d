@@ -1,6 +1,4 @@
-import type { MaterialType, Season } from "@/lib/constants";
-
-const HIGH_TEMP_MATERIALS: ReadonlySet<MaterialType> = new Set(["ABS", "PC", "Nylon"]);
+import type { Season } from "@/lib/constants";
 
 // 規格書給高溫材質 0.4~0.5 度/小時的區間，取中間值；低溫材質規格書直接給 0.24。
 const LOW_TEMP_KWH_PER_HOUR = 0.24;
@@ -19,7 +17,8 @@ export interface PricingSettingsInput {
 
 export interface CalculateQuoteInput {
   costPerGram: number;
-  materialType: MaterialType;
+  /** 高溫材質每小時耗電較高，由材質設定決定 */
+  isHighTemp: boolean;
   weightGrams: number | null;
   printHours: number | null;
   season: Season;
@@ -58,8 +57,7 @@ export function calculateQuote(
   input: CalculateQuoteInput,
   settings: PricingSettingsInput,
 ): QuoteBreakdown {
-  const isHighTemp = HIGH_TEMP_MATERIALS.has(input.materialType);
-  const kwhPerHour = isHighTemp ? HIGH_TEMP_KWH_PER_HOUR : LOW_TEMP_KWH_PER_HOUR;
+  const kwhPerHour = input.isHighTemp ? HIGH_TEMP_KWH_PER_HOUR : LOW_TEMP_KWH_PER_HOUR;
   const electricityRate =
     input.season === "summer" ? settings.electricitySummer : settings.electricityOffseason;
 
