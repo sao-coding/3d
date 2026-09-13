@@ -1,1 +1,0 @@
-ALTER TABLE `quotes` ADD `notes` text;

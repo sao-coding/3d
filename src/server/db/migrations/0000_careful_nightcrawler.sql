@@ -1,8 +1,16 @@
-CREATE TABLE `filaments` (
+CREATE TABLE `brands` (
 	`id` text PRIMARY KEY NOT NULL,
 	`name` text NOT NULL,
-	`brand` text,
-	`material_type` text NOT NULL,
+	`sort_order` integer DEFAULT 0 NOT NULL,
+	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL
+);
+--> statement-breakpoint
+CREATE UNIQUE INDEX `brands_name_unique` ON `brands` (`name`);--> statement-breakpoint
+CREATE TABLE `filaments` (
+	`id` text PRIMARY KEY NOT NULL,
+	`brand_id` text,
+	`material_id` text NOT NULL,
+	`color_name` text,
 	`color` text,
 	`purchase_price` integer NOT NULL,
 	`weight_grams` integer DEFAULT 1000 NOT NULL,
@@ -10,9 +18,26 @@ CREATE TABLE `filaments` (
 	`is_active` integer DEFAULT true NOT NULL,
 	`purchased_at` integer,
 	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
+	FOREIGN KEY (`brand_id`) REFERENCES `brands`(`id`) ON UPDATE no action ON DELETE restrict,
+	FOREIGN KEY (`material_id`) REFERENCES `materials`(`id`) ON UPDATE no action ON DELETE restrict
+);
+--> statement-breakpoint
+CREATE INDEX `filaments_brandId_idx` ON `filaments` (`brand_id`);--> statement-breakpoint
+CREATE INDEX `filaments_materialId_idx` ON `filaments` (`material_id`);--> statement-breakpoint
+CREATE TABLE `materials` (
+	`id` text PRIMARY KEY NOT NULL,
+	`name` text NOT NULL,
+	`pros` text NOT NULL,
+	`cons` text NOT NULL,
+	`good_for` text,
+	`is_high_temp` integer DEFAULT false NOT NULL,
+	`sort_order` integer DEFAULT 0 NOT NULL,
+	`created_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL,
 	`updated_at` integer DEFAULT (cast(unixepoch('subsecond') * 1000 as integer)) NOT NULL
 );
 --> statement-breakpoint
+CREATE UNIQUE INDEX `materials_name_unique` ON `materials` (`name`);--> statement-breakpoint
 CREATE TABLE `modeling_tiers` (
 	`id` text PRIMARY KEY NOT NULL,
 	`tier_name` text NOT NULL,
@@ -47,6 +72,7 @@ CREATE TABLE `quotes` (
 	`modeling_tier_id` text,
 	`modeling_custom_price` integer,
 	`model_url` text,
+	`notes` text,
 	`revision_count` integer DEFAULT 0 NOT NULL,
 	`material_cost` integer,
 	`electricity_depreciation_cost` integer,
