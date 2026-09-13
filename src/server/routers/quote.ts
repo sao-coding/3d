@@ -269,6 +269,14 @@ export const quoteRouter = {
     return rows.map((row) => ({ ...row, filamentName: filamentLabel(row) }));
   }),
 
+  // 需登入：拒絕（未確認）或刪除（已確認）一筆報價紀錄，直接從資料庫移除
+  delete: protectedProcedure.input(z.object({ id: z.string() })).handler(async ({ input }) => {
+    const [existing] = await db.select({ id: quotes.id }).from(quotes).where(eq(quotes.id, input.id));
+    if (!existing) throw new ORPCError("NOT_FOUND");
+    await db.delete(quotes).where(eq(quotes.id, input.id));
+    return { success: true };
+  }),
+
   // 需登入：/history 明細與「完成報價」表單的初始值
   getById: protectedProcedure.input(z.object({ id: z.string() })).handler(async ({ input }) => {
     const [row] = await db

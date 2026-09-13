@@ -1,7 +1,7 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { History, Search } from "lucide-react";
+import { History, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { toast } from "sonner";
@@ -51,10 +51,19 @@ const completeSchema = z.object({
 type CompleteInput = z.input<typeof completeSchema>;
 type CompleteValues = z.output<typeof completeSchema>;
 
+/** 卡片清單與明細視窗共用的刪除確認目標 */
+interface DeleteTarget {
+  id: string;
+  label: string;
+  pending: boolean;
+}
+
 function HistoryPage() {
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [openId, setOpenId] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<DeleteTarget | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const listQuery = useQuery(orpc.quote.list.queryOptions());
   const detailQuery = useQuery({
@@ -71,6 +80,22 @@ function HistoryPage() {
 
   const pendingCount = (listQuery.data ?? []).filter((row) => row.status === "pending").length;
 
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await client.quote.delete({ id: deleteTarget.id });
+      toast.success(deleteTarget.pending ? "已拒絕這筆詢價" : "已刪除這筆紀錄");
+      if (openId === deleteTarget.id) setOpenId(null);
+      setDeleteTarget(null);
+      queryClient.invalidateQueries({ queryKey: orpc.quote.list.queryKey() });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "刪除失敗，請稍後再試");
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <PageShell width="xl" className="space-y-8">
       <PageHeading
@@ -81,7 +106,7 @@ function HistoryPage() {
           </>
         }
         title="報價歷史"
-        description="待確認的排在最前面；點任一筆填入真實克重與工時即可完成報價。"
+        description="待確認的排在最前面；點任一筆填入真實克重與工時即可完成報價，不需要的可以拒絕或刪除。"
         actions={
           <div className="flex items-center gap-2">
             <span className="rounded-full border border-border bg-card/70 px-3 py-1.5 text-xs font-medium text-muted-foreground">
@@ -138,8 +163,23 @@ function HistoryPage() {
                   <div className="text-lg font-bold tracking-tight tabular-nums">
                     {row.roundedPrice != null ? formatCurrency(row.roundedPrice) : "—"}
                   </div>
-                  <div className="text-xs text-muted-foreground">
-                    {new Date(row.createdAt).toLocaleDateString("zh-TW")}
+                  <div className="mt-1 flex items-center justify-end gap-1.5 text-xs text-muted-foreground">
+                    <span>{new Date(row.createdAt).toLocaleDateString("zh-TW")}</span>
+                    <button
+                      type="button"
+                      aria-label={pending ? "拒絕這筆詢價" : "刪除這筆紀錄"}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setDeleteTarget({
+                          id: row.id,
+                          label: row.recipientName || row.filamentName,
+                          pending,
+                        });
+                      }}
+                      className="grid size-6 shrink-0 cursor-pointer place-items-center rounded-full text-muted-foreground/70 transition-colors hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
                   </div>
                 </div>
               </CardContent>
@@ -165,7 +205,41 @@ function HistoryPage() {
                 setOpenId(null);
                 queryClient.invalidateQueries({ queryKey: orpc.quote.list.queryKey() });
               }}
+              onDeleteRequested={() =>
+                setDeleteTarget({
+                  id: detailQuery.data.id,
+                  label: detailQuery.data.recipientName || detailQuery.data.filamentName,
+                  pending: detailQuery.data.status === "pending",
+                })
+              }
             />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* 刪除/拒絕的二次確認——動作沒有復原，不能一鍵就砍掉 */}
+      <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <DialogContent>
+          {deleteTarget && (
+            <>
+              <DialogHeader>
+                <DialogTitle>{deleteTarget.pending ? "拒絕這筆詢價？" : "刪除這筆紀錄？"}</DialogTitle>
+              </DialogHeader>
+              <p className="text-muted-foreground">
+                {deleteTarget.label}
+                {deleteTarget.pending
+                  ? " 這筆詢價將直接移除，客人手上的連結會顯示找不到這筆報價。"
+                  : " 這筆已確認的報價紀錄將永久刪除，無法復原。"}
+              </p>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={deleting}>
+                  取消
+                </Button>
+                <Button variant="destructive" onClick={confirmDelete} disabled={deleting}>
+                  {deleting ? "處理中..." : deleteTarget.pending ? "拒絕" : "刪除"}
+                </Button>
+              </DialogFooter>
+            </>
           )}
         </DialogContent>
       </Dialog>
@@ -178,9 +252,11 @@ type QuoteDetailData = Awaited<ReturnType<typeof client.quote.getById>>;
 function QuoteDetail({
   quote,
   onCompleted,
+  onDeleteRequested,
 }: {
   quote: QuoteDetailData;
   onCompleted: () => void;
+  onDeleteRequested: () => void;
 }) {
   const modelingTiersQuery = useQuery({
     ...orpc.settings.listModelingTiers.queryOptions(),
@@ -255,11 +331,22 @@ function QuoteDetail({
               （只有你看得到，實際收多少你自己決定）
             </span>
           </p>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={onDeleteRequested}
+            >
+              <Trash2 className="size-4" />
+              刪除這筆紀錄
+            </Button>
+          </DialogFooter>
         </div>
       ) : (
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-3">
           <p className="text-muted-foreground">
-            切完片後把真正的克重／小時數填進來，確認完成這筆報價。
+            切完片後把真正的克重／小時數填進來，確認完成這筆報價；不打算接的話可以直接拒絕。
           </p>
           <div className="space-y-2">
             <Label>克重（g）</Label>
@@ -376,6 +463,14 @@ function QuoteDetail({
             </>
           )}
           <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onDeleteRequested}
+              disabled={formState.isSubmitting}
+            >
+              拒絕
+            </Button>
             <Button type="submit" size="lg" disabled={formState.isSubmitting}>
               {formState.isSubmitting ? "處理中..." : "確認並完成報價"}
             </Button>
